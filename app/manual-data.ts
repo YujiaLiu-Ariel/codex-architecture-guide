@@ -94,6 +94,14 @@ export const manualChapters: Record<string, ManualChapter> = {
           "local-first persistence 提供了可回放和离线恢复，但也引入多个 truth surface。canonical rollout 最接近发生过的事实；SQLite metadata 是查询投影，允许短暂滞后；memory 是模型推导的辅助信息，必须允许过期和遗漏。架构准确性的基础不是“只有一个数据库”，而是明确每种状态能证明什么。",
         ],
       },
+      {
+        number: "1.6",
+        title: "Transport and backpressure are part of the contract",
+        paragraphs: [
+          "External app-server supports stdio JSONL, experimental WebSocket, and a Unix-socket control path. TUI and exec use app-server-client in-process with typed channels, but still keep the app-server response envelope and lifecycle semantics. Removing JSON serialization does not create a separate runtime contract.",
+          "The queues between ingress, request processing, and outbound writes are bounded. Saturated external ingress returns JSON-RPC error -32001 and clients are expected to retry with exponential backoff and jitter. The in-process client uses bounded command queues, but its local consumer event queue is unbounded so unread notifications cannot block the response the caller is waiting for. This is an explicit deadlock-avoidance trade-off: bounded runtime pressure, potentially growing client-side event memory.",
+        ],
+      },
     ],
     codeReading: {
       title: "建议的第一次源码穿行",
@@ -124,6 +132,8 @@ export const manualChapters: Record<string, ManualChapter> = {
       { label: "Turn loop", path: "codex-rs/core/src/session/turn.rs", lines: [145, 530], proves: "一个 Turn 包含多次 sampling、输入 drain、compaction 与 stop hook。" },
       { label: "Persistence contract", path: "codex-rs/thread-store/README.md", lines: [1, 31], proves: "history append 与 metadata update 是两个明确 API。" },
       { label: "Context invariants", path: "AGENTS.md", lines: [72, 120], proves: "仓库声明 core extraction、context 与 breaking-change 约束。" },
+      { label: "External transport pressure", path: "codex-rs/app-server/README.md", lines: [20, 55], proves: "app-server transports use bounded queues and expose overload as retryable JSON-RPC error -32001." },
+      { label: "In-process transport", path: "codex-rs/app-server-client/README.md", lines: [27, 66], proves: "TUI/exec keep app-server semantics over typed channels with explicit queue and shutdown behavior." },
     ],
   },
 
@@ -145,6 +155,7 @@ export const manualChapters: Record<string, ManualChapter> = {
       { number: "2.2", title: "CodexThread 是 façade，Session 才是状态 owner", paragraphs: ["CodexThread 持有 Arc<Session>、SessionIo、source/config/rollout 信息，并被源码描述为组成 thread 消息双向流的 conduit。它给外层提供 start、steer、interrupt、subscribe 等稳定入口，但不应被理解为另一份会话状态。", "Session::spawn 构建内部状态后启动 submission_loop。调用者通过 Submission sender 发送 Op，通过 Event receiver 和 AgentStatus watch 观察变化。把写操作集中到一个控制循环，比向多个 UI 暴露共享可变结构更容易保证事件顺序与取消语义。"] },
       { number: "2.3", title: "四种生命周期防止配置与能力泄漏", paragraphs: ["process 级对象负责连接、缓存和注册表；thread 级对象负责 history、active turn 与输入队列；turn 级 TurnContext 决定模型、权限、cwd 与环境；step 级 StepContext 冻结本次 sampling 可见的工具和 world state。", "最常见的错误是把 step 信息提升为 process 全局，或让异步 tool future 回头读取已经变化的 turn 配置。ToolCallRuntime 因此保留发起调用时的 StepContext：即使工具晚于模型响应执行，它仍使用当时对模型声明的能力与策略。"] },
       { number: "2.4", title: "fork 暴露了 actor 与持久化之间的边界", paragraphs: ["fork 不只是复制数据库行。若 snapshot 发生在 mid-turn，历史可能包含尚未形成完整 user/assistant 边界的 items。ThreadManager 的 ForkSnapshot 可以截断到第 n 个 user message 之前，或合成 Interrupted marker，使恢复后的 thread 不把半完成动作误当成成功结果。", "这说明内存 actor 与 durable rollout 是两种时间视图。恢复和 fork 的正确性不能只看反序列化是否成功，还要验证边界处的 tool call/output 配对、active turn 状态和对外 lifecycle 投影。"] },
+      { number: "2.5", title: "resume reconstructs Session state; it does not revive the old actor", paragraphs: ["thread/resume reads persisted history and restorable thread settings, then creates a new in-memory Session. The new actor must rebuild initial messages, model-visible history, permission settings, and lifecycle notifications from rollout/state data. A loaded thread and a stored thread with the same id are therefore not the same runtime object.", "fork creates a new thread id and copies a selected history prefix. resume keeps identity and continues the existing history. Tests cover both because the failure modes differ: resume can omit persisted settings or initial events; fork can copy an invalid mid-turn suffix or lose the exact boundary requested by the caller." ] },
     ],
     codeReading: { title: "沿 ownership 阅读", steps: ["列出 ThreadManagerState 的所有字段并按进程级/线程级分类。", "从 CodexThread::start_or_steer_turn 跟进 Submission。", "在 Session::spawn 找到 channel 和 submission_loop 的创建点。", "搜索 StepContext 的 capture 与异步工具持有位置。"] },
     invariants: ["thread 状态通过 Session control loop 修改。", "共享 manager 不等于进行中 Turn 的即时可变配置。", "异步工具必须绑定发起时的 StepContext。"],
@@ -155,6 +166,8 @@ export const manualChapters: Record<string, ManualChapter> = {
       { label: "Session IO", path: "codex-rs/core/src/session/mod.rs", lines: [381, 407], proves: "submission、event、status 与 termination 通道。" },
       { label: "Actor spawn", path: "codex-rs/core/src/session/mod.rs", lines: [780, 812], proves: "Session::spawn 启动 submission_loop。" },
       { label: "Fork snapshot", path: "codex-rs/core/src/thread_manager.rs", lines: [155, 205], proves: "mid-turn snapshot 的截断与中断表达。" },
+      { label: "Resume reconstruction test", path: "codex-rs/core/tests/suite/resume.rs", lines: [23, 107], proves: "resume restores settings and rebuilds initial events from the rollout." },
+      { label: "Fork history boundary test", path: "codex-rs/core/tests/suite/fork_thread.rs", lines: [30, 155], proves: "fork copies an exact rollout prefix into a new thread." },
     ],
   },
 
@@ -299,6 +312,7 @@ export const manualChapters: Record<string, ManualChapter> = {
       { number: "7.2", title: "反馈质量决定模型是否能自我修正", paragraphs: ["agent 的优势不是第一次输出必然正确，而是能观察 action result 并迭代。高质量工具输出要包含 command、target、exit status、关键 stderr、变更摘要和可定位产物；模糊的“失败了”会迫使模型猜测。", "Context truncation 又会削弱反馈，因此稳定摘要应放在输出开头，大型日志放文件并给路径。对外部 API，最好同时返回 operation id 和随后查询到的状态，从而区分 request accepted 与 effect observed。"] },
       { number: "7.3", title: "验证必须贴近风险，而不是统一跑一个大测试", paragraphs: ["代码修改的证据链通常是：静态类型/格式 → 受影响单测 → 集成路径 → diff 自审 → 必要时真实环境 smoke。工具和协议改动还要验证事件顺序、取消、重试以及旧客户端兼容。", "大而全的 test suite 可能被已有环境问题阻塞，也可能掩盖与改动无关的失败。runtime 应记录精确命令、结果和剩余 gap；这比一个无上下文的绿色标志更能支撑准确性判断。"] },
       { number: "7.4", title: "第二判断者有价值，但不是自动真相", paragraphs: ["review agent、guardian 或 stop hook 能捕捉遗漏，尤其适合检查 diff、计划覆盖与安全风险。但它们仍是模型判断，可能共享同一盲点。", "高风险任务应把 reviewer 绑定到不同 evidence surface，例如实际测试输出、git diff、部署状态或领域规则。multi-agent 子任务完成也不能直接转化为 parent 的 verified claim；主控制面必须整合结果并处理冲突。"] },
+      { number: "7.5", title: "Observability is split between SessionTelemetry and subsystem metrics", paragraphs: ["codex-otel owns exporter wiring, traces, low-level metrics, and trace-context propagation. SessionTelemetry adds consistent conversation/model/auth/source metadata to business events. Subsystem-owned audit events can stay in their own crate. This avoids forcing every metric through Session, while preserving a shared session identity for end-to-end analysis.", "The core integration suite is organized around runtime behavior, not only isolated units: approvals, compaction, resume/fork, model switching, MCP refresh, prompt caching, tool lifecycle, WebSocket fallback, and sandbox policy each have dedicated modules. This test architecture is part of the design because many invariants cross crate boundaries and cannot be proven by a handler unit test." ] },
     ],
     codeReading: { title: "寻找准确性证据", steps: ["从 response schema 看结构能证明什么。", "跟 ToolRouter 结果如何回到 history。", "检查 TurnComplete 的条件，确认它没有目标正确性语义。", "再看 integration tests 是否覆盖实际事件链。"] },
     invariants: ["每个成功状态必须说明其证明范围。", "模型应看到可定位、可复查的工具反馈。", "最终 claim 需要与风险相称的外部 evidence。"],
@@ -308,6 +322,9 @@ export const manualChapters: Record<string, ManualChapter> = {
       { label: "Turn completion", path: "codex-rs/core/src/session/turn.rs", lines: [425, 520], proves: "完成由 follow-up/input/hook 控制，不含目标 oracle。" },
       { label: "External status projection", path: "codex-rs/app-server/src/bespoke_event_handling.rs", lines: [1482, 1542], proves: "Completed/Failed/Interrupted 是事件和摘要的投影。" },
       { label: "Integration preference", path: "AGENTS.md", lines: [112, 120], proves: "agent logic changes 优先使用 core/suite 集成测试。" },
+      { label: "Telemetry ownership", path: "codex-rs/otel/README.md", lines: [1, 9], proves: "OTEL provider, SessionTelemetry, metrics, and trace context are separate APIs." },
+      { label: "Business-event boundary", path: "codex-rs/otel/README.md", lines: [74, 104], proves: "SessionTelemetry owns session events while subsystems may own audit events." },
+      { label: "Integration suite map", path: "codex-rs/core/tests/suite/mod.rs", lines: [36, 180], proves: "cross-cutting runtime behaviors are verified as dedicated integration modules." },
     ],
   },
 
@@ -329,6 +346,7 @@ export const manualChapters: Record<string, ManualChapter> = {
       { number: "8.2", title: "Granular approval 使授权原因成为一等信息", paragraphs: ["OnRequest、UnlessTrusted、Never 和 Granular 不只是 UI 模式。Granular 可以分别控制 sandbox approval 与 rule-based approval，使 runtime 区分“命令请求越过沙箱”和“规则判定需要人类确认”。", "这要求 approval event 带上 reason、可用决策和请求上下文；客户端只显示一个通用确认框会丢失安全语义。协议改动必须同时验证 core event、app-server projection 和各客户端交互。"] },
       { number: "8.3", title: "Project trust 与能力发现都不是授权替代品", paragraphs: ["trusted project 可以改变默认审批策略，但不能让危险命令绕过实际 sandbox 判定。类似地，UI 是否展示某个 tool、plugin 或 MCP 只是 discovery；如果直接按 slug 或名称调用的 server-side 入口缺少校验，隐藏列表并不能阻止执行。", "安全评审要沿真实调用链闭环：从模型可见 spec 到 router、handler、exec policy、sandbox backend 和外部 effect。只审查 catalog/filter 容易把可发现性误当成权限边界。"] },
       { number: "8.4", title: "网络是独立 effect surface", paragraphs: ["文件系统限制不能自动约束网络数据外传，网络 proxy/approval 也不能阻止本地危险写入。两类 effect 需要独立 policy 和审计字段。", "组合工具尤其危险：一个只读文件工具加一个网络工具可以共同形成数据外传路径。StepContext 的 capability set、approval reason 和 post-tool evidence 必须允许审计这种跨工具链。"] },
+      { number: "8.5", title: "SandboxPolicy maps to different OS backends", paragraphs: ["On macOS, Seatbelt consumes the resolved SandboxPolicy and protects writable roots while keeping .git and .codex read-only. On Linux, legacy-compatible policies may use Landlock; split filesystem policies that need exact denied/read-only/writable carve-outs route through bubblewrap. WSL1 fails before entering the unsupported bubblewrap path.", "Windows has elevated and unelevated backends with different enforcement ranges. A split policy is accepted only if the selected backend can enforce it directly or if it round-trips through the legacy SandboxPolicy without changing meaning. Unsupported carve-outs fail closed. The portable contract is the resolved permission policy; the enforcement mechanism is platform-specific and must be tested separately." ] },
     ],
     codeReading: { title: "沿一次 exec 决策阅读", steps: ["从 shell tool 进入 ExecApprovalRequest。", "列出 exec_policy 合并的每个输入。", "分别跟 NeedsApproval、Forbidden 和 Skip 分支。", "确认实际平台 sandbox 与网络策略在哪里执行。"] },
     invariants: ["approval 是意图授权，sandbox 是技术执行边界。", "缺少所需保护时应 forbidden，而非静默降级。", "discovery/filter 不能充当 authorization。"],
@@ -338,6 +356,9 @@ export const manualChapters: Record<string, ManualChapter> = {
       { label: "Decision mapping", path: "codex-rs/core/src/exec_policy.rs", lines: [317, 430], proves: "Forbidden、NeedsApproval 与 Skip 的组合逻辑。" },
       { label: "Protection fallback", path: "codex-rs/core/src/exec_policy.rs", lines: [730, 835], proves: "approval policy、trust 与实际 sandbox 能力共同决定结果。" },
       { label: "Approval events", path: "codex-rs/core/src/session/mod.rs", lines: [2469, 2668], proves: "执行/patch/permission 请求进入 Session 事件流。" },
+      { label: "macOS Seatbelt", path: "codex-rs/core/README.md", lines: [23, 35], proves: "Seatbelt enforces resolved filesystem and network policy on macOS." },
+      { label: "Linux backend selection", path: "codex-rs/core/README.md", lines: [37, 63], proves: "policy shape selects Landlock or bubblewrap and unsupported WSL1 fails early." },
+      { label: "Windows fail-closed rules", path: "codex-rs/core/README.md", lines: [65, 92], proves: "Windows backends accept only policy shapes they can preserve." },
     ],
   },
 
@@ -393,6 +414,7 @@ export const manualChapters: Record<string, ManualChapter> = {
       { number: "10.3", title: "Multi-agent 是 Session 图，不是并行函数调用", paragraphs: ["multi-agent handler 使用 ThreadManager 创建子 Session，并可用 AgentGraphStore 保存关系。子 agent 有自己的 context、model loop、工具和完成事件；parent 需要等待、读取结果并决定是否接受。", "并行化提高吞吐和专业化，但会复制 context 成本，并引入结果冲突、取消传播与权限继承问题。completed child 只能证明子循环结束，不能证明 parent goal 已验证；最终 evidence ownership 仍在发起任务的控制面。"] },
       { number: "10.4", title: "从 codex-core 抽取要按 ownership，而不是按文件数量", paragraphs: ["仓库明确承认 codex-core 已经膨胀，并要求新概念优先复用现有专用 crate。成功的抽取应让 crate 拥有独立类型、策略和测试，例如 models-manager 管目录，thread-store 管持久化 contract。", "如果新 crate 的所有 API 都需要 &Session、&TurnContext 和 core 私有类型，它只是物理搬家，依赖方向没有改变。通常应先提炼 host-side types/adapters，再让 core 保留 orchestration；codex-rs/tools/README 描述的就是这种渐进迁移。"] },
       { number: "10.5", title: "新增能力的架构决策顺序", paragraphs: ["先问它改变的是模型知识、可调用动作、分发包装还是 agent lifecycle；再确定生命周期是 process/thread/turn/step；然后定义 discovery 与 authorization 是否分离；最后设计事件、持久化、取消和测试。", "只有完成这些问题，才能决定 folder。过早创建 crate 或 tool 往往会把 policy 藏在 handler 中，或让 app-server 直接依赖具体实现。architecture review 的目标是找到语义 owner，再让目录映射这个 owner。"] },
+      { number: "10.6", title: "MCP has a connection state machine before it becomes ToolSpec", paragraphs: ["McpConnectionSet aggregates server connections, startup status, metadata, tools, resources, required/optional policy, catalog revision, filters, elicitation routing, and plugin provenance. A connection is reusable only when its connection identity and OAuth credentials still match, startup is complete, and the underlying client is not closed.", "Catalog publication has its own consistency rule. stable_catalog_revision returns None while a required connection is not ready or has closed. list_all_tools can reconnect a failed startup, use cached tools, skip unavailable optional servers, filter model visibility, attach server metadata, and normalize names. StepContext should capture a binding only after these publication rules, so model-visible ToolSpec and the client used for execution come from one catalog revision." ] },
     ],
     codeReading: { title: "为一个新能力选择落点", steps: ["写下能力的输入、输出、副作用和生命周期。", "判断它进入 prompt、tool registry、package discovery 还是 Session graph。", "检查 authorization 是否存在独立 server-side gate。", "检查是否能在不依赖 Session 私有状态下抽成 crate。", "为事件、取消、持久化与兼容性设计集成测试。"] },
     invariants: ["discovery 不等于 authorization。", "sampling 已看到的 capability set 在 StepContext 内稳定。", "子 agent 完成不等于 parent 验证。", "crate boundary 应反映 ownership 和依赖方向。"],
@@ -403,6 +425,8 @@ export const manualChapters: Record<string, ManualChapter> = {
       { label: "Process extension registry", path: "codex-rs/core/src/thread_manager.rs", lines: [339, 365], proves: "skills、plugins、MCP、CodeMode 与 agent graph 的共享 owner。" },
       { label: "Multi-agent spawn", path: "codex-rs/core/src/tools/handlers/multi_agents/spawn.rs", lines: [44, 139], proves: "子 agent 从当前 Turn 配置构造并通过 agent control 创建独立 thread。" },
       { label: "MCP connection lifecycle", path: "codex-rs/codex-mcp/src/connection_manager.rs", lines: [1, 220], proves: "外部 server 连接与 capability 生命周期。" },
+      { label: "MCP client reuse", path: "codex-rs/codex-mcp/src/connection_manager.rs", lines: [80, 155], proves: "connection identity, OAuth state, readiness, and closure decide reuse." },
+      { label: "MCP catalog publication", path: "codex-rs/codex-mcp/src/connection_manager/tool_catalog.rs", lines: [37, 165], proves: "visibility, readiness, cache, reconnect, metadata, and name normalization build the model-facing catalog." },
     ],
   },
 };

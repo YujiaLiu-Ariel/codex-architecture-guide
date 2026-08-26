@@ -22,6 +22,12 @@ test("renders the Codex architecture learning site", async () => {
   assert.match(html, /<html lang="zh-CN">/);
   assert.match(html, /<title>Codex Architecture Atlas<\/title>/);
   assert.match(html, /High-level architecture review/);
+  assert.match(html, /Start with the whole repo/);
+  assert.match(html, /DEPENDENCY DIRECTION/);
+  assert.match(html, /RUNTIME LIFETIMES/);
+  assert.match(html, /SOURCE VOCABULARY/);
+  assert.match(html, /DEPTH &amp; COMPLETENESS AUDIT/);
+  assert.match(html, /137/);
   assert.match(html, /Session actor/);
   assert.match(html, /Codex 端到端系统架构/);
   assert.match(html, /读完本章，你应该能够/);
@@ -38,6 +44,9 @@ test("includes accessible navigation and source evidence", async () => {
   const html = await response.text();
 
   assert.match(html, /aria-label="主导航"/);
+  assert.match(html, /aria-label="Repository subsystem map"/);
+  assert.match(html, /aria-label="Runtime lifetimes"/);
+  assert.match(html, /aria-label="Architecture coverage audit"/);
   assert.match(html, /aria-label="架构专题"/);
   assert.match(html, /aria-label="开发位置索引"/);
   assert.match(html, /github\.com\/openai\/codex\/blob\/d4998d611ad37de0aa9723b6fdd2d9a2f8ff4763/);

@@ -10,6 +10,7 @@ import {
   type Dossier,
 } from "./guide-data";
 import { manualChapters, type ManualChapter, type SourceEvidence } from "./manual-data";
+import { coverageAudit, protocolMap, repoGroups, runtimeLifetimes, sourceVocabulary } from "./structure-data";
 
 const PROGRESS_KEY = "codex-architecture-atlas:progress";
 const THEME_KEY = "codex-architecture-atlas:theme";
@@ -248,6 +249,7 @@ export default function Guide() {
           <span>Codex Architecture Atlas</span>
         </a>
         <div className="top-links">
+          <a href="#structure">Structure overview</a>
           <a href="#architecture">Architecture review</a>
           <a href="#dossiers">Deep dives</a>
           <a href="#locator">Source index</a>
@@ -318,6 +320,114 @@ export default function Guide() {
           </div>
         ))}
         <p className="snapshot-note">Pinned source<br /><a href={`https://github.com/openai/codex/tree/${SOURCE_COMMIT}`} target="_blank" rel="noreferrer">{SOURCE_COMMIT.slice(0, 7)} ↗</a></p>
+      </section>
+
+      <section className="section structure-section" id="structure">
+        <header className="section-head structure-head">
+          <div>
+            <span className="section-index">00 / REPOSITORY STRUCTURE</span>
+            <h2>Start with the whole repo</h2>
+          </div>
+          <p>
+            先看 ownership 和 dependency direction，再看文件。这个 snapshot 有 <code>6,667</code> 个 tracked files，
+            其中 <code>6,231</code> 个在 <code>codex-rs/</code>；Rust workspace 有 <code>137</code> 个 members。
+            下面只保留对开发定位有用的 subsystem。
+          </p>
+        </header>
+
+        <div className="repo-summary-grid">
+          {[
+            ["6,667", "tracked files", "整个 pinned repository"],
+            ["6,231", "files under codex-rs", "主要 implementation surface"],
+            ["137", "Cargo workspace members", "crate 很多，但 runtime ownership 仍集中"],
+            ["8", "subsystem groups", "下面的 architecture map"],
+          ].map(([value, label, note]) => (
+            <div key={label}><strong>{value}</strong><span>{label}</span><p>{note}</p></div>
+          ))}
+        </div>
+
+        <figure className="repo-dependency-map">
+          <div className="diagram-heading">
+            <span className="detail-label">DEPENDENCY DIRECTION</span>
+            <h4>Surfaces call inward; state and effects stay behind runtime boundaries</h4>
+          </div>
+          <div className="repo-flow-row">
+            <span>PRODUCT</span>
+            <div><code>tui</code><code>exec</code><code>TypeScript SDK</code><code>Python SDK</code></div>
+          </div>
+          <div className="repo-flow-arrow">↓ commands · ↑ notifications</div>
+          <div className="repo-flow-row boundary-row">
+            <span>BOUNDARY</span>
+            <div><code>app-server-client</code><code>app-server</code><code>app-server-protocol/v2</code></div>
+          </div>
+          <div className="repo-flow-arrow">↓ Submission&lt;Op&gt; · ↑ Event&lt;EventMsg&gt;</div>
+          <div className="repo-flow-row runtime-row">
+            <span>RUNTIME</span>
+            <div><code>ThreadManagerState</code><code>CodexThread</code><code>Session</code><code>run_turn</code></div>
+          </div>
+          <div className="repo-flow-arrow split-arrow">↓ policy + snapshots + service calls</div>
+          <div className="repo-subsystems">
+            <div><span>MODEL / CONTEXT</span><code>models-manager</code><code>ContextManager</code></div>
+            <div><span>TOOLS / MCP</span><code>ToolRouter</code><code>codex-mcp</code></div>
+            <div><span>EXECUTION</span><code>execpolicy</code><code>sandbox backends</code></div>
+            <div><span>STATE</span><code>thread-store</code><code>memories</code></div>
+          </div>
+          <div className="repo-crosscut"><span>CROSS-CUTTING</span><code>config</code><code>auth</code><code>otel</code><code>hooks</code><code>tests</code></div>
+          <figcaption>
+            这不是严格的 crate dependency graph。它表达 logical ownership。实际代码中 <code>codex-core</code> 仍是 composition hub，
+            所以很多 subsystem 通过 <code>Session</code> / <code>TurnContext</code> 组合，而不是完全独立。
+          </figcaption>
+        </figure>
+
+        <div className="repo-groups" role="list" aria-label="Repository subsystem map">
+          {repoGroups.map((group) => (
+            <article className="repo-group" role="listitem" key={group.index}>
+              <div className="repo-group-head"><span>{group.index}</span><div><h3>{group.name}</h3><p>{group.owner}</p></div></div>
+              <div className="repo-folder-list">{group.folders.map((folder) => <code key={folder}>{folder}</code>)}</div>
+              <p className="repo-responsibility">{group.responsibility}</p>
+              <dl><div><dt>DEPENDS ON</dt><dd>{group.dependsOn}</dd></div></dl>
+              <a href={sourceUrl(group.startHere)} target="_blank" rel="noreferrer"><span>Start here</span><code>{group.startHere}</code><b>↗</b></a>
+            </article>
+          ))}
+        </div>
+
+        <div className="structure-table-block">
+          <div className="structure-block-title"><span className="detail-label">RUNTIME LIFETIMES</span><h3>先确认 state 活多久，再判断谁应该拥有它</h3></div>
+          <div className="structure-table lifetime-table" role="table" aria-label="Runtime lifetimes">
+            <div className="structure-row structure-table-head" role="row"><span>LIFETIME</span><span>OWNER</span><span>STATE</span><span>ENDS / CHANGES AT</span></div>
+            {runtimeLifetimes.map((item) => (
+              <div className="structure-row" role="row" key={item.lifetime}><code>{item.lifetime}</code><strong>{item.owner}</strong><p>{item.state}</p><p>{item.invalidation}</p></div>
+            ))}
+          </div>
+        </div>
+
+        <div className="structure-split">
+          <div className="structure-table-block">
+            <div className="structure-block-title"><span className="detail-label">PROTOCOL MAP</span><h3>同一个 Turn 经过五种 contract</h3></div>
+            <div className="structure-table compact-structure-table">
+              {protocolMap.map((item) => (
+                <div className="protocol-entry" key={item.boundary}><strong>{item.boundary}</strong><p><code>{item.input}</code><b>→</b><code>{item.output}</code></p><span>{item.owner}</span></div>
+              ))}
+            </div>
+          </div>
+          <div className="vocabulary-block">
+            <div className="structure-block-title"><span className="detail-label">SOURCE VOCABULARY</span><h3>后文保留这些 original identifiers</h3></div>
+            <dl>{sourceVocabulary.map(([term, definition]) => <div key={term}><dt><code>{term}</code></dt><dd>{definition}</dd></div>)}</dl>
+          </div>
+        </div>
+
+        <div className="coverage-block">
+          <div className="structure-block-title"><span className="detail-label">DEPTH & COMPLETENESS AUDIT</span><h3>当前 guide 讲到了哪里，哪里仍然只是 map</h3></div>
+          <div className="coverage-table" role="table" aria-label="Architecture coverage audit">
+            <div className="coverage-row coverage-head" role="row"><span>AREA</span><span>DEPTH</span><span>COVERED</span><span>REMAINING GAP</span></div>
+            {coverageAudit.map((item) => (
+              <div className="coverage-row" role="row" key={item.area}>
+                <strong>{item.area}</strong><span className={`coverage-level level-${item.level.toLowerCase().replace(" ", "-")}`}>{item.level}</span><p>{item.covered}</p><p>{item.gap}</p>
+              </div>
+            ))}
+          </div>
+          <p className="audit-note">“Deep” 表示可以建立 implementation mental model，不表示覆盖每个 handler、feature flag 或 platform branch。这个表会作为后续补充章节的 checklist。</p>
+        </div>
       </section>
 
       <section className="section architecture-section" id="architecture">
