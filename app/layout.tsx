@@ -19,23 +19,14 @@ export const metadata: Metadata = {
     "A source-grounded Chinese architecture and development guide for the openai/codex repository.",
   openGraph: {
     title: "Codex Architecture Atlas",
-    description: "先看懂系统，再开始改代码。openai/codex 架构与开发定位指南。",
+    description: "面向 agent 开发者的 openai/codex 源码架构评审：control loop、context、model、tools、accuracy、safety 与 memory。",
     type: "website",
     locale: "zh_CN",
-    images: [
-      {
-        url: "og.png",
-        width: 1734,
-        height: 907,
-        alt: "Codex Architecture Atlas — 先看懂系统，再开始改代码。",
-      },
-    ],
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: "Codex Architecture Atlas",
-    description: "先看懂系统，再开始改代码。openai/codex 架构与开发定位指南。",
-    images: ["og.png"],
+    description: "面向 agent 开发者的 openai/codex 源码架构评审与 deep dives。",
   },
 };
 

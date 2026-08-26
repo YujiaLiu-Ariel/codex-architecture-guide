@@ -3,26 +3,28 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   SOURCE_COMMIT,
-  SOURCE_ROOT,
   architectureLayers,
-  chapters,
+  architecturePressures,
+  dossiers,
   locatorEntries,
-  type Chapter,
+  type Dossier,
 } from "./guide-data";
 
 const PROGRESS_KEY = "codex-architecture-atlas:progress";
 const THEME_KEY = "codex-architecture-atlas:theme";
 
 function sourceUrl(path: string) {
-  return `${SOURCE_ROOT}/${path}`;
+  const leaf = path.split("/").at(-1) ?? "";
+  const route = path.endsWith("/") || !leaf.includes(".") ? "tree" : "blob";
+  return `https://github.com/openai/codex/${route}/${SOURCE_COMMIT}/${path}`;
 }
 
-function ChapterDetail({
-  chapter,
+function DossierDetail({
+  dossier,
   complete,
   onToggleComplete,
 }: {
-  chapter: Chapter;
+  dossier: Dossier;
   complete: boolean;
   onToggleComplete: () => void;
 }) {
@@ -30,8 +32,8 @@ function ChapterDetail({
     <article className="chapter-detail" aria-live="polite">
       <div className="detail-head">
         <div>
-          <span className="kicker">Chapter {String(chapter.number).padStart(2, "0")} · {chapter.eyebrow}</span>
-          <h3>{chapter.title}</h3>
+          <span className="kicker">Dossier {String(dossier.number).padStart(2, "0")} · {dossier.domain}</span>
+          <h3>{dossier.title}</h3>
         </div>
         <button
           className={complete ? "complete-button is-complete" : "complete-button"}
@@ -42,20 +44,51 @@ function ChapterDetail({
           {complete ? "已读" : "标记为已读"}
         </button>
       </div>
-      <p className="detail-intro">{chapter.description}</p>
-      <div className="detail-grid">
+      <p className="detail-question">{dossier.question}</p>
+      <p className="detail-intro">{dossier.thesis}</p>
+
+      <div className="call-path" aria-label="核心调用链">
+        <span className="detail-label">CONTROL / DATA FLOW</span>
         <div>
-          <span className="detail-label">读完你应该记住</span>
-          <ol className="takeaway-list">
-            {chapter.takeaways.map((takeaway) => (
-              <li key={takeaway}>{takeaway}</li>
-            ))}
-          </ol>
+          {dossier.callPath.map((step, index) => (
+            <span key={step}><code>{step}</code>{index < dossier.callPath.length - 1 && <b aria-hidden="true">→</b>}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mechanics-grid">
+        {dossier.mechanics.map((item, index) => (
+          <div className="mechanic" key={item.title}>
+            <span>{String(index + 1).padStart(2, "0")}</span>
+            <strong>{item.title}</strong>
+            <p>{item.body}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="tradeoff-section">
+        <span className="detail-label">ARCHITECTURE TRADE-OFFS</span>
+        <div className="tradeoff-table">
+          <div className="tradeoff-row tradeoff-header"><span>DECISION</span><span>GAIN</span><span>COST / TENSION</span></div>
+          {dossier.tradeoffs.map((item) => (
+            <div className="tradeoff-row" key={item.decision}>
+              <strong>{item.decision}</strong><p>{item.gain}</p><p>{item.cost}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="detail-grid evidence-grid">
+        <div>
+          <span className="detail-label">FAILURE MODES TO TEST</span>
+          <ul className="failure-list">
+            {dossier.failureModes.map((failure) => <li key={failure}>{failure}</li>)}
+          </ul>
         </div>
         <div>
-          <span className="detail-label">从这些源码开始</span>
+          <span className="detail-label">SOURCE EVIDENCE</span>
           <div className="source-list">
-            {chapter.paths.map((item) => (
+            {dossier.paths.map((item) => (
               <a key={item.path} href={sourceUrl(item.path)} target="_blank" rel="noreferrer">
                 <span>{item.label}</span>
                 <code>{item.path}</code>
@@ -70,7 +103,7 @@ function ChapterDetail({
 }
 
 export default function Guide() {
-  const [selectedChapterId, setSelectedChapterId] = useState(chapters[0].id);
+  const [selectedChapterId, setSelectedChapterId] = useState(dossiers[0].id);
   const [completed, setCompleted] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部");
@@ -84,15 +117,19 @@ export default function Guide() {
 
     if (savedProgress) {
       try {
+        const parsed = JSON.parse(savedProgress);
+        const validProgress = Array.isArray(parsed)
+          ? parsed.filter((id): id is string => typeof id === "string" && dossiers.some((dossier) => dossier.id === id))
+          : [];
         // eslint-disable-next-line react-hooks/set-state-in-effect
-        setCompleted(JSON.parse(savedProgress));
+        setCompleted(validProgress);
       } catch {
         window.localStorage.removeItem(PROGRESS_KEY);
       }
     }
 
     if (savedTheme === "dark") setTheme("dark");
-    if (chapters.some((chapter) => chapter.id === hashChapter)) {
+    if (dossiers.some((dossier) => dossier.id === hashChapter)) {
       setSelectedChapterId(hashChapter);
     }
   }, []);
@@ -102,8 +139,8 @@ export default function Guide() {
     window.localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
-  const selectedChapter =
-    chapters.find((chapter) => chapter.id === selectedChapterId) ?? chapters[0];
+  const selectedDossier =
+    dossiers.find((dossier) => dossier.id === selectedChapterId) ?? dossiers[0];
 
   const categories = ["全部", ...Array.from(new Set(locatorEntries.map((entry) => entry.category)))];
 
@@ -135,7 +172,7 @@ export default function Guide() {
     });
   };
 
-  const progress = Math.round((completed.length / chapters.length) * 100);
+  const progress = Math.round((completed.length / dossiers.length) * 100);
 
   return (
     <main>
@@ -145,9 +182,9 @@ export default function Guide() {
           <span>Codex Architecture Atlas</span>
         </a>
         <div className="top-links">
-          <a href="#architecture">架构</a>
-          <a href="#learning-path">学习路径</a>
-          <a href="#locator">开发定位</a>
+          <a href="#architecture">Architecture review</a>
+          <a href="#dossiers">Deep dives</a>
+          <a href="#locator">Source index</a>
           <button
             className="theme-toggle"
             type="button"
@@ -164,15 +201,15 @@ export default function Guide() {
 
       <section className="hero" id="top">
         <div className="hero-copy">
-          <div className="eyebrow"><span /> SOURCE-GROUNDED FIELD GUIDE</div>
-          <h1>先看懂系统，<br />再开始改代码。</h1>
+          <div className="eyebrow"><span /> SOURCE-GROUNDED ARCHITECTURE REVIEW</div>
+          <h1>Codex runtime，<br />从边界到状态。</h1>
           <p>
-            面向第一次打开 <code>openai/codex</code> 的开发者。用一套清晰的心智模型，把 137 个 Rust workspace members
-            还原成入口、协议、运行时、工具、安全与状态六条主线。
+            面向有 agent 开发经验的读者。这里不解释“怎么用 Codex”，而是追踪一条 Turn 如何从客户端命令进入
+            <code>Session</code>，跨过 context、model、tool、approval 与 persistence，并分析每个边界背后的 trade-off。
           </p>
           <div className="hero-actions">
-            <a className="primary-action" href="#architecture">从架构地图开始 <span>↓</span></a>
-            <a className="secondary-action" href="#locator">我想直接找代码</a>
+            <a className="primary-action" href="#architecture">Read the architecture review <span>↓</span></a>
+            <a className="secondary-action" href="#dossiers">Open deep dives</a>
           </div>
         </div>
 
@@ -184,12 +221,12 @@ export default function Guide() {
           </div>
           <div className="trace-list">
             {[
-              ["01", "codex", "CLI dispatch"],
-              ["02", "app-server", "Thread / Turn / Item"],
-              ["03", "core::session", "run_turn"],
-              ["04", "model_client", "Responses stream"],
-              ["05", "tool_router", "execute + return"],
-              ["06", "thread_store", "persist history"],
+              ["01", "ClientRequest", "command, not completion"],
+              ["02", "app-server", "policy + protocol projection"],
+              ["03", "Session actor", "state owner + event stream"],
+              ["04", "run_turn", "sampling feedback loop"],
+              ["05", "Action plane", "tools under policy"],
+              ["06", "Durability", "history ≠ metadata ≠ memory"],
             ].map(([number, name, note], index) => (
               <div className="trace-row" key={name} style={{ "--delay": `${index * 70}ms` } as React.CSSProperties}>
                 <span>{number}</span>
@@ -206,22 +243,58 @@ export default function Guide() {
         </div>
       </section>
 
-      <section className="stats-strip" aria-label="仓库数据">
-        <div><strong>6,667</strong><span>tracked files</span></div>
-        <div><strong>137</strong><span>Rust members</span></div>
-        <div><strong>3,394</strong><span>Rust sources</span></div>
-        <div><strong>18</strong><span>guided chapters</span></div>
-        <p>Snapshot · 2026-08-26 · <a href={`https://github.com/openai/codex/tree/${SOURCE_COMMIT}`} target="_blank" rel="noreferrer">{SOURCE_COMMIT.slice(0, 7)} ↗</a></p>
+      <section className="stats-strip pressure-strip" aria-label="核心架构压力">
+        {architecturePressures.map((pressure) => (
+          <div key={pressure.name}>
+            <strong>{pressure.name}</strong>
+            <span>{pressure.thesis}</span>
+            <p>{pressure.note}</p>
+          </div>
+        ))}
+        <p className="snapshot-note">Pinned source<br /><a href={`https://github.com/openai/codex/tree/${SOURCE_COMMIT}`} target="_blank" rel="noreferrer">{SOURCE_COMMIT.slice(0, 7)} ↗</a></p>
       </section>
 
       <section className="section architecture-section" id="architecture">
         <header className="section-head">
           <div>
             <span className="section-index">01 / SYSTEM MAP</span>
-            <h2>五层架构，一条主循环</h2>
+            <h2>High-level architecture review</h2>
           </div>
-          <p>不要从文件树开始读。先顺着一次用户请求穿过系统，再回到每一层找它的责任边界。</p>
+          <p>先给出全局判断，再进入局部实现：Codex 是一个 event-driven、local-first 的 agent runtime；客户端通过 application boundary 共享同一控制面，执行事实通过 tool feedback 回到模型，状态则被拆成可回放、可查询和可学习三类。</p>
         </header>
+
+        <div className="review-brief">
+          <div className="review-thesis">
+            <span className="detail-label">SYSTEM THESIS</span>
+            <h3>它不是“LLM + 一组工具”，而是一台围绕 Session actor 构建的异步状态机。</h3>
+            <p>外层将客户端命令转换为内部 Op，Session 串行管理 thread 状态，Turn loop 让模型与环境反复交换证据，最后把内部事件分别投影给客户端与持久化层。Context、model、tools、safety、memory 都是这个状态机的策略插件，而不是各自独立的产品路径。</p>
+          </div>
+          <div className="review-findings">
+            {[
+              ["Primary strength", "统一 runtime + 明确事件流", "TUI、exec 与外部客户端共享核心语义；运行状态由事件而非同步返回传播。"],
+              ["Key design choice", "控制面与 action plane 分离", "Session 决定下一步；ToolRouter/handlers 在 approval、sandbox 和 cancellation 下执行副作用。"],
+              ["Structural debt", "codex-core 仍有强引力", "工具、memory 等能力正在抽 crate，但依赖 Session/TurnContext 的 orchestration 仍集中在 core。"],
+              ["Scaling pressure", "context 与 derived memory", "单 turn 连续性依赖有损 compaction；跨 turn 连续性依赖模型生成的、可能陈旧的 memory。"],
+              ["Correctness boundary", "completion 不等于 correctness", "runtime 能证明命令、事件和工具结果发生过；任务是否正确仍需要测试、review 或领域 oracle。"],
+              ["Evolution risk", "双协议 + 多投影", "内部 Op/Event 与外部 Thread/Turn/Item 有意分离，但每次新语义都需要保持翻译和客户端投影一致。"],
+            ].map(([label, title, body]) => (
+              <div className="review-finding" key={label}>
+                <span>{label}</span><strong>{title}</strong><p>{body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="review-sources">
+            <span className="detail-label">HIGH-LEVEL EVIDENCE</span>
+            {[
+              ["Application boundary", "codex-rs/app-server/src/request_processors/"],
+              ["Runtime ownership", "codex-rs/core/src/thread_manager.rs"],
+              ["Session state machine", "codex-rs/core/src/session/mod.rs"],
+              ["Durability contract", "codex-rs/thread-store/README.md"],
+            ].map(([label, path]) => (
+              <a href={sourceUrl(path)} key={path} target="_blank" rel="noreferrer"><span>{label}</span><code>{path}</code><b aria-hidden="true">↗</b></a>
+            ))}
+          </div>
+        </div>
 
         <div className="layer-map">
           {architectureLayers.map((layer, index) => (
@@ -241,17 +314,17 @@ export default function Guide() {
 
         <div className="loop-explainer">
           <div className="loop-title">
-            <span>THE HEARTBEAT</span>
-            <h3>一次 Turn 的真实路径</h3>
+            <span>CONTROL + DATA FLOW</span>
+            <h3>从命令受理到可恢复证据</h3>
           </div>
           <div className="loop-steps" aria-label="Turn 执行步骤">
             {[
-              ["01", "Prepare", "压缩历史、解析 skills 与 tools"],
-              ["02", "Sample", "向 Responses API 发起流式请求"],
-              ["03", "Route", "ToolRouter 识别并分派调用"],
-              ["04", "Execute", "在审批与沙箱约束下执行"],
-              ["05", "Continue", "工具结果进入下一次采样"],
-              ["06", "Complete", "发出最终消息并持久化"],
+              ["01", "Accept", "app-server 校验 request；response 仅表示 command accepted"],
+              ["02", "Submit", "TurnInputRequest 转换为 Submission(Op) 进入 Session"],
+              ["03", "Snapshot", "冻结 StepContext、prompt view 与 model-visible tools"],
+              ["04", "Feedback", "sampling → tool execution → output 回到下一次 sampling"],
+              ["05", "Project", "EventMsg 被翻译为 Thread / Turn / Item notification"],
+              ["06", "Persist", "canonical history、metadata 与 derived memory 分层写入"],
             ].map(([number, title, text]) => (
               <div className="loop-step" key={number}>
                 <span>{number}</span>
@@ -266,43 +339,43 @@ export default function Guide() {
         </div>
       </section>
 
-      <section className="section learning-section" id="learning-path">
+      <section className="section learning-section" id="dossiers">
         <header className="section-head">
           <div>
-            <span className="section-index">02 / LEARNING PATH</span>
-            <h2>从陌生到可以动手</h2>
+            <span className="section-index">02 / ARCHITECTURE DOSSIERS</span>
+            <h2>沿着架构压力下钻</h2>
           </div>
           <div className="progress-block" aria-label={`学习进度 ${progress}%`}>
-            <div><span>你的进度</span><strong>{completed.length} / {chapters.length}</strong></div>
+            <div><span>已审阅 dossiers</span><strong>{completed.length} / {dossiers.length}</strong></div>
             <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
           </div>
         </header>
 
         <div className="chapter-layout">
-          <div className="chapter-grid" role="list" aria-label="学习章节">
-            {chapters.map((chapter) => (
-              <div role="listitem" key={chapter.id}>
+          <div className="chapter-grid" role="list" aria-label="架构专题">
+            {dossiers.map((dossier) => (
+              <div role="listitem" key={dossier.id}>
                 <button
                   type="button"
-                  className={`chapter-card ${selectedChapterId === chapter.id ? "is-active" : ""} ${completed.includes(chapter.id) ? "is-complete" : ""}`}
-                  onClick={() => selectChapter(chapter.id)}
+                  className={`chapter-card ${selectedChapterId === dossier.id ? "is-active" : ""} ${completed.includes(dossier.id) ? "is-complete" : ""}`}
+                  onClick={() => selectChapter(dossier.id)}
                 >
-                  <span className="chapter-number">{String(chapter.number).padStart(2, "0")}</span>
+                  <span className="chapter-number">{String(dossier.number).padStart(2, "0")}</span>
                   <span className="chapter-copy">
-                    <small>{chapter.eyebrow}</small>
-                    <strong>{chapter.title}</strong>
+                    <small>{dossier.domain}</small>
+                    <strong>{dossier.title}</strong>
                   </span>
-                  <span className="chapter-state" aria-hidden="true">{completed.includes(chapter.id) ? "✓" : "→"}</span>
+                  <span className="chapter-state" aria-hidden="true">{completed.includes(dossier.id) ? "✓" : "→"}</span>
                 </button>
               </div>
             ))}
           </div>
 
           <div id="chapter-reader" className="reader-anchor">
-            <ChapterDetail
-              chapter={selectedChapter}
-              complete={completed.includes(selectedChapter.id)}
-              onToggleComplete={() => toggleComplete(selectedChapter.id)}
+            <DossierDetail
+              dossier={selectedDossier}
+              complete={completed.includes(selectedDossier.id)}
+              onToggleComplete={() => toggleComplete(selectedDossier.id)}
             />
           </div>
         </div>
@@ -312,9 +385,9 @@ export default function Guide() {
         <header className="section-head locator-head">
           <div>
             <span className="section-index">03 / CHANGE LOCATOR</span>
-            <h2>我要改什么？</h2>
+            <h2>Source ownership index</h2>
           </div>
-          <p>输入功能、概念或路径。这个索引优先给你第一个应该打开的 folder，而不是把整个文件树扔给你。</p>
+          <p>不是简单的目录清单：先定位行为的 owner，再沿注释中的相邻边界继续追踪。输入架构概念、失效模式或路径。</p>
         </header>
 
         <div className="locator-shell">
@@ -325,7 +398,7 @@ export default function Guide() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="例如：审批、TUI、MCP、thread、Python SDK…"
+                placeholder="例如：context、模型、memory、accuracy、approval、thread…"
               />
               {query && <button type="button" aria-label="清除搜索" onClick={() => setQuery("")}>×</button>}
             </label>
@@ -376,19 +449,19 @@ export default function Guide() {
 
       <section className="section rules-section">
         <div className="rule-card rule-dark">
-          <span>READER RULE 01</span>
-          <h3>先找边界，再看实现。</h3>
-          <p>先判断需求属于客户端、协议、runtime、工具、安全还是状态层，然后才进入具体文件。</p>
+          <span>ARCHITECTURE INVARIANT 01</span>
+          <h3>Command accepted ≠ work completed.</h3>
+          <p>外部 request 的成功只说明命令进入 runtime；真实生命周期由后续 Event / Notification 描述。</p>
         </div>
         <div className="rule-card rule-accent">
-          <span>READER RULE 02</span>
-          <h3>Core 不是默认答案。</h3>
-          <p>仓库约定明确提醒：不要继续把新概念堆进 codex-core。优先寻找已有 crate 或稳定扩展边界。</p>
+          <span>ARCHITECTURE INVARIANT 02</span>
+          <h3>History ≠ prompt ≠ memory.</h3>
+          <p>发生过的 canonical items、当前模型可见视图、跨会话推导记忆有不同的一致性与准确性边界。</p>
         </div>
         <div className="rule-card rule-light">
-          <span>READER RULE 03</span>
-          <h3>对外协议要更谨慎。</h3>
-          <p>Protocol 与 app-server API 面向多个消费者。一次看似简单的字段变化，可能是破坏性变更。</p>
+          <span>ARCHITECTURE INVARIANT 03</span>
+          <h3>Completion ≠ correctness.</h3>
+          <p>控制循环结束只证明没有更多 follow-up；准确性仍取决于工具证据、测试、review 与领域约束。</p>
         </div>
       </section>
 

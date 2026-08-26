@@ -9,11 +9,11 @@ so every architecture claim can link to a stable source snapshot.
 
 ## What is included
 
-- a five-layer system map
-- the Thread → Turn → Tool execution lifecycle
-- an 18-chapter learning path with local progress tracking
-- a searchable “what should I change?” folder locator
-- fixed source links for every chapter
+- a high-level architecture review with strengths, structural debt, scaling pressure, and correctness boundaries
+- a five-layer control/data-flow map from client projection to durable state
+- 10 source-grounded architecture dossiers covering runtime ownership, context, model flexibility, tools, accuracy, safety, memory, and extensibility
+- explicit mechanisms, trade-offs, failure modes, call paths, and source evidence for every dossier
+- a searchable source ownership index for locating the responsible crate or folder
 - responsive light and dark themes
 
 ## Local development
@@ -47,4 +47,3 @@ analysis is based exclusively on the public
 [`openai/codex`](https://github.com/openai/codex) repository, which is also
 licensed under Apache-2.0. Product names and trademarks belong to their
 respective owners.
-
