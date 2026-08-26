@@ -30,6 +30,12 @@ test("renders the Codex architecture learning site", async () => {
   assert.match(html, /137/);
   assert.match(html, /Session actor/);
   assert.match(html, /Codex 端到端系统架构/);
+  assert.match(html, /GLOBAL LAYERED ARCHITECTURE/);
+  assert.match(html, /Agent runtime ownership/);
+  assert.match(html, /THREAD STATE OWNER/);
+  assert.match(html, /Turn execution and feedback loop/);
+  assert.match(html, /EFFECT CONTROL PATH/);
+  assert.match(html, /STATE CONTRACTS/);
   assert.match(html, /读完本章，你应该能够/);
   assert.match(html, /1\.5/);
   assert.match(html, /ARCHITECT REVIEW QUESTIONS/);

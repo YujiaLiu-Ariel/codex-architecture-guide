@@ -53,6 +53,159 @@ function ArchitectureDiagram({ chapter }: { chapter: ManualChapter }) {
   );
 }
 
+function SystemDesignDiagram() {
+  const componentLink = (label: string, path: string, note?: string) => (
+    <a className="sd-component" href={sourceUrl(path)} target="_blank" rel="noreferrer">
+      <strong>{label}</strong>{note && <span>{note}</span>}<b aria-hidden="true">↗</b>
+    </a>
+  );
+
+  return (
+    <figure className="system-design-diagram">
+      <div className="system-design-head">
+        <div><span className="detail-label">GLOBAL LAYERED ARCHITECTURE</span><h3>Codex agent runtime — system design view</h3></div>
+        <div className="system-legend"><span><i className="legend-control" />command / control</span><span><i className="legend-event" />event / feedback</span><span><i className="legend-state" />state write / read</span></div>
+      </div>
+
+      <div className="system-design-canvas" role="group" aria-label="Codex layered system architecture showing clients, application boundary, runtime ownership, turn feedback loop, effect enforcement, external systems, and durability">
+        <section className="sd-layer sd-clients">
+          <header><span>L0</span><div><strong>Product surfaces</strong><small>presentation and user input</small></div></header>
+          <div className="sd-layer-body sd-client-grid">
+            {componentLink("TUI", "codex-rs/tui")}
+            {componentLink("codex exec", "codex-rs/exec")}
+            {componentLink("IDE / App", "codex-rs/app-server")}
+            {componentLink("TypeScript SDK", "sdk/typescript", "spawns codex exec")}
+            {componentLink("Python SDK", "sdk/python", "JSON-RPC client")}
+          </div>
+        </section>
+
+        <div className="sd-connector"><span className="control-down">commands ↓</span><span className="events-up">↑ notifications / deltas / approvals</span></div>
+
+        <section className="sd-layer sd-boundary">
+          <header><span>L1</span><div><strong>Application boundary</strong><small>client contract, lifecycle, compatibility</small></div></header>
+          <div className="sd-layer-body sd-boundary-body">
+            <div className="sd-boundary-ingress">
+              <span className="sd-group-label">INGRESS</span>
+              {componentLink("InProcessAppServerClient", "codex-rs/app-server-client", "typed channels · TUI/exec")}
+              {componentLink("stdio / ws / unix", "codex-rs/app-server-transport", "external JSON-RPC transport")}
+            </div>
+            <div className="sd-horizontal-arrow">→</div>
+            <div className="sd-boundary-contract">
+              <span className="sd-group-label">PUBLIC CONTRACT</span>
+              {componentLink("app-server-protocol/v2", "codex-rs/app-server-protocol", "Thread · Turn · Item")}
+            </div>
+            <div className="sd-horizontal-arrow bidirectional-arrow">⇄</div>
+            <div className="sd-boundary-processing">
+              <span className="sd-group-label">TRANSLATION + PROJECTION</span>
+              {componentLink("request processors", "codex-rs/app-server/src/request_processors", "validation · overrides · trust")}
+              {componentLink("event projection", "codex-rs/app-server/src/bespoke_event_handling.rs", "EventMsg → notification")}
+            </div>
+          </div>
+        </section>
+
+        <div className="sd-connector core-connector"><span className="control-down">Submission&lt;Op&gt; ↓</span><span className="events-up">↑ Event&lt;EventMsg&gt;</span></div>
+
+        <section className="sd-layer sd-runtime">
+          <header><span>L2</span><div><strong>Agent runtime ownership</strong><small>one process, many thread actors</small></div></header>
+          <div className="sd-layer-body sd-runtime-layout">
+            <aside className="sd-shared-services">
+              <span className="sd-group-label">PROCESS-SCOPED SERVICES</span>
+              {[
+                ["AuthManager", "codex-rs/login"], ["ModelsManager", "codex-rs/models-manager"], ["EnvironmentManager", "codex-rs/exec-server/src/environment.rs"],
+                ["Skills / Plugins", "codex-rs/core-plugins"], ["MCP runtime", "codex-rs/codex-mcp"], ["ThreadStore", "codex-rs/thread-store"],
+              ].map(([label, path]) => <a href={sourceUrl(path)} target="_blank" rel="noreferrer" key={label}><code>{label}</code></a>)}
+              <small>shared by new and resumed Sessions</small>
+            </aside>
+
+            <div className="sd-owner-box thread-manager-box">
+              <div className="sd-owner-title"><span>PROCESS OWNER</span><strong>ThreadManagerState</strong><code>threads: HashMap&lt;ThreadId, Arc&lt;CodexThread&gt;&gt;</code></div>
+              <div className="sd-thread-map">
+                <span className="sd-group-label">ONE ENTRY IN THE THREAD MAP</span>
+                <div className="sd-owner-box codex-thread-box">
+                  <div className="sd-owner-title"><span>THREAD FAÇADE</span><strong>CodexThread</strong><code>Arc&lt;Session&gt; + SessionIo</code></div>
+                  <div className="sd-owner-box session-box">
+                    <div className="sd-owner-title"><span>THREAD STATE OWNER</span><strong>Session actor</strong></div>
+                    <div className="sd-session-internals">
+                      <div><code>Submission sender</code><span>→</span><code>submission_loop</code><span>→</span><code>active Turn</code></div>
+                      <div><code>ContextManager</code><code>pending input</code><code>base config</code><code>rollout handle</code></div>
+                    </div>
+                    <div className="sd-session-output"><span>emits</span><code>Event&lt;EventMsg&gt;</code><span>and appends</span><code>ResponseItem</code></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside className="sd-crosscut-services">
+              <span className="sd-group-label">CROSS-CUTTING</span>
+              <code>config layers</code><code>hooks</code><code>cancellation</code><code>SessionTelemetry</code><code>diagnostics</code><code>feature flags</code>
+              <small>observes or constrains more than one lifecycle</small>
+            </aside>
+          </div>
+        </section>
+
+        <div className="sd-connector turn-connector"><span className="control-down">start Turn · freeze policy ↓</span><span className="events-up">↑ progress · usage · completion</span></div>
+
+        <section className="sd-layer sd-turn-layer">
+          <header><span>L3</span><div><strong>Turn execution and feedback loop</strong><small>one Turn can contain many model requests and tool calls</small></div></header>
+          <div className="sd-layer-body sd-turn-body">
+            <div className="sd-context-column">
+              <span className="sd-group-label">STATE SNAPSHOTS</span>
+              {componentLink("TurnContext", "codex-rs/core/src/codex_thread.rs", "model · cwd · permissions · environment")}
+              {componentLink("StepContext", "codex-rs/core/src/tools/context.rs", "prompt · tools · world state")}
+              {componentLink("ContextManager", "codex-rs/core/src/context_manager/history.rs", "canonical items → for_prompt")}
+            </div>
+
+            <div className="sd-feedback-loop">
+              <span className="sd-group-label">run_turn</span>
+              <div className="sd-model-path">
+                <div className="sd-loop-node"><small>01</small><strong>build Prompt</strong><span>history.for_prompt()</span></div><b>→</b>
+                <div className="sd-loop-node"><small>02</small><strong>ModelClientSession</strong><span>turn-scoped transport</span></div><b>→</b>
+                <div className="sd-loop-node external-node"><small>EXTERNAL</small><strong>Responses API</strong><span>stream ResponseItems</span></div>
+              </div>
+              <div className="sd-model-return">function call / custom tool call ↓</div>
+              <div className="sd-tool-path">
+                <div className="sd-loop-node"><small>03</small><strong>ToolRouter</strong><span>lookup in StepContext</span></div><b>→</b>
+                <div className="sd-loop-node"><small>04</small><strong>parallel gate</strong><span>RwLock read / write</span></div><b>→</b>
+                <div className="sd-loop-node"><small>05</small><strong>Tool handler</strong><span>side effect or query</span></div>
+              </div>
+              <div className="sd-feedback-return"><span>FunctionCallOutput / CustomToolCallOutput</span><b>↶ record into ContextManager, then sample again</b></div>
+            </div>
+          </div>
+        </section>
+
+        <div className="sd-connector effect-connector"><span className="control-down">tool intent ↓</span><span className="events-up">↑ result / error / approval event</span></div>
+
+        <section className="sd-layer sd-foundation">
+          <header><span>L4</span><div><strong>Effect enforcement and durable state</strong><small>actions and state have separate contracts</small></div></header>
+          <div className="sd-layer-body sd-foundation-grid">
+            <div className="sd-foundation-panel effect-panel">
+              <span className="sd-group-label">EFFECT CONTROL PATH</span>
+              <div className="sd-mini-flow"><code>exec_policy</code><b>→</b><code>AskForApproval</code><b>→</b><code>PermissionProfile</code></div>
+              <div className="sd-platform-grid"><code>macOS Seatbelt</code><code>Linux Landlock / bwrap</code><code>Windows sandbox</code><code>network proxy</code></div>
+              <div className="sd-external-target"><span>EXECUTES AGAINST</span><strong>workspace · shell · filesystem · network</strong></div>
+            </div>
+            <div className="sd-foundation-panel state-panel">
+              <span className="sd-group-label">STATE CONTRACTS</span>
+              <div className="sd-state-grid">
+                <div><strong>Canonical</strong><code>rollout JSONL</code><span>append-only history</span></div>
+                <div><strong>Query projection</strong><code>SQLite metadata</code><span>list / search / paging</span></div>
+                <div><strong>Agent topology</strong><code>AgentGraphStore</code><span>parent / child edges</span></div>
+                <div><strong>Derived</strong><code>Memory Stage 1 / 2</code><span>model-generated context</span></div>
+              </div>
+              <div className="sd-state-return"><span>memory / resumed history</span><b>↗ returns to future Session and ContextManager</b></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <figcaption>
+        Reading rule: commands move downward; events and tool feedback move upward; state writes move from <code>Session</code> toward the durability layer.
+        The diagram shows logical ownership, not separate deployed services. Most boxes run in one Rust process; <code>Responses API</code>, MCP servers, and the host OS are external boundaries.
+      </figcaption>
+    </figure>
+  );
+}
+
 function DossierDetail({
   dossier,
   complete,
@@ -472,7 +625,7 @@ export default function Guide() {
           </div>
         </div>
 
-        <ArchitectureDiagram chapter={manualChapters["system-boundary"]} />
+        <SystemDesignDiagram />
 
         <div className="layer-map">
           {architectureLayers.map((layer, index) => (

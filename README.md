@@ -9,7 +9,7 @@ so every architecture claim can link to a stable source snapshot.
 
 ## What is included
 
-- a high-level architecture review with an end-to-end component diagram, strengths, structural debt, scaling pressure, and correctness boundaries
+- a high-level architecture review with a layered system-design diagram showing nested runtime ownership, model/tool feedback, effect enforcement, external boundaries, and durable state
 - an opening repository structure overview covering 8 subsystem groups, dependency direction, 6 runtime lifetimes, 5 protocol boundaries, and an explicit coverage audit
 - 10 long-form architecture chapters and 10 code-native diagrams covering runtime ownership, the turn loop, context, model flexibility, tools, accuracy, safety, memory, and extensibility
 - 49 numbered analysis sections with explicit mechanics, lifecycle boundaries, trade-offs, failure modes, invariants, and review questions
