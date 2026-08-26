@@ -1,0 +1,9 @@
+Codex Architecture Atlas
+Copyright 2026 YujiaLiu-Ariel
+
+This independent learning guide analyzes the public openai/codex repository.
+It is not an official OpenAI publication. OpenAI, Codex, and related marks are
+the property of their respective owners.
+
+Upstream source: https://github.com/openai/codex
+Pinned source snapshot: d4998d611ad37de0aa9723b6fdd2d9a2f8ff4763

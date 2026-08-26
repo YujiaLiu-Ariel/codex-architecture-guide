@@ -40,3 +40,11 @@ handled by `.github/workflows/pages.yml`.
 This is an independent learning guide and is not an official OpenAI
 publication. Source code remains governed by the upstream repository's license.
 
+## License and attribution
+
+This guide is released under the [Apache License 2.0](LICENSE). Architecture
+analysis is based exclusively on the public
+[`openai/codex`](https://github.com/openai/codex) repository, which is also
+licensed under Apache-2.0. Product names and trademarks belong to their
+respective owners.
+
