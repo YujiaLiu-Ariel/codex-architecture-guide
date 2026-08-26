@@ -9,6 +9,7 @@ import {
   locatorEntries,
   type Dossier,
 } from "./guide-data";
+import { manualChapters, type ManualChapter, type SourceEvidence } from "./manual-data";
 
 const PROGRESS_KEY = "codex-architecture-atlas:progress";
 const THEME_KEY = "codex-architecture-atlas:theme";
@@ -17,6 +18,38 @@ function sourceUrl(path: string) {
   const leaf = path.split("/").at(-1) ?? "";
   const route = path.endsWith("/") || !leaf.includes(".") ? "tree" : "blob";
   return `https://github.com/openai/codex/${route}/${SOURCE_COMMIT}/${path}`;
+}
+
+function evidenceUrl(source: SourceEvidence) {
+  return `${sourceUrl(source.path)}#L${source.lines[0]}-L${source.lines[1]}`;
+}
+
+function ArchitectureDiagram({ chapter }: { chapter: ManualChapter }) {
+  return (
+    <figure className="architecture-diagram">
+      <div className="diagram-heading">
+        <span className="detail-label">ARCHITECTURE DIAGRAM</span>
+        <h4>{chapter.diagram.title}</h4>
+      </div>
+      <div className="diagram-canvas" role="img" aria-label={`${chapter.diagram.title}：${chapter.diagram.caption}`}>
+        {chapter.diagram.lanes.map((lane, laneIndex) => (
+          <div className="diagram-lane" key={lane.label}>
+            <div className="diagram-lane-label"><span>{lane.label}</span></div>
+            <div className="diagram-nodes">
+              {lane.nodes.map((node, index) => (
+                <div className="diagram-node-wrap" key={node}>
+                  <div className="diagram-node"><small>{String(index + 1).padStart(2, "0")}</small><strong>{node}</strong></div>
+                  {index < lane.nodes.length - 1 && <span className="diagram-arrow" aria-hidden="true">→</span>}
+                </div>
+              ))}
+            </div>
+            {laneIndex < chapter.diagram.lanes.length - 1 && <span className="diagram-down" aria-hidden="true">↓</span>}
+          </div>
+        ))}
+      </div>
+      <figcaption>{chapter.diagram.caption}</figcaption>
+    </figure>
+  );
 }
 
 function DossierDetail({
@@ -28,6 +61,8 @@ function DossierDetail({
   complete: boolean;
   onToggleComplete: () => void;
 }) {
+  const manual = manualChapters[dossier.id];
+
   return (
     <article className="chapter-detail" aria-live="polite">
       <div className="detail-head">
@@ -47,6 +82,16 @@ function DossierDetail({
       <p className="detail-question">{dossier.question}</p>
       <p className="detail-intro">{dossier.thesis}</p>
 
+      <section className="chapter-objectives" aria-labelledby={`${dossier.id}-objectives`}>
+        <span className="detail-label">LEARNING OBJECTIVES</span>
+        <h4 id={`${dossier.id}-objectives`}>读完本章，你应该能够</h4>
+        <ol>
+          {manual.objectives.map((objective) => <li key={objective}>{objective}</li>)}
+        </ol>
+      </section>
+
+      <ArchitectureDiagram chapter={manual} />
+
       <div className="call-path" aria-label="核心调用链">
         <span className="detail-label">CONTROL / DATA FLOW</span>
         <div>
@@ -56,15 +101,28 @@ function DossierDetail({
         </div>
       </div>
 
-      <div className="mechanics-grid">
-        {dossier.mechanics.map((item, index) => (
-          <div className="mechanic" key={item.title}>
-            <span>{String(index + 1).padStart(2, "0")}</span>
-            <strong>{item.title}</strong>
-            <p>{item.body}</p>
-          </div>
+      <div className="manual-sections">
+        {manual.sections.map((section) => (
+          <section className="manual-section" key={section.number}>
+            <div className="manual-section-number">{section.number}</div>
+            <div className="manual-section-copy">
+              <h4>{section.title}</h4>
+              {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+              {section.bullets && (
+                <ul>{section.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul>
+              )}
+            </div>
+          </section>
         ))}
       </div>
+
+      <section className="code-reading">
+        <div>
+          <span className="detail-label">SOURCE WALKTHROUGH</span>
+          <h4>{manual.codeReading.title}</h4>
+        </div>
+        <ol>{manual.codeReading.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+      </section>
 
       <div className="tradeoff-section">
         <span className="detail-label">ARCHITECTURE TRADE-OFFS</span>
@@ -80,24 +138,32 @@ function DossierDetail({
 
       <div className="detail-grid evidence-grid">
         <div>
-          <span className="detail-label">FAILURE MODES TO TEST</span>
+          <span className="detail-label">FAILURE MODES + INVARIANTS</span>
           <ul className="failure-list">
             {dossier.failureModes.map((failure) => <li key={failure}>{failure}</li>)}
+            {manual.invariants.map((invariant) => <li className="invariant" key={invariant}>{invariant}</li>)}
           </ul>
         </div>
         <div>
-          <span className="detail-label">SOURCE EVIDENCE</span>
+          <span className="detail-label">PINNED SOURCE EVIDENCE</span>
           <div className="source-list">
-            {dossier.paths.map((item) => (
-              <a key={item.path} href={sourceUrl(item.path)} target="_blank" rel="noreferrer">
-                <span>{item.label}</span>
+            {manual.evidence.map((item) => (
+              <a key={`${item.path}-${item.lines[0]}`} href={evidenceUrl(item)} target="_blank" rel="noreferrer">
+                <span>{item.label} · L{item.lines[0]}–L{item.lines[1]}</span>
                 <code>{item.path}</code>
+                <p>{item.proves}</p>
                 <span aria-hidden="true">↗</span>
               </a>
             ))}
           </div>
         </div>
       </div>
+
+      <section className="review-questions">
+        <span className="detail-label">ARCHITECT REVIEW QUESTIONS</span>
+        <h4>如果这些问题答不出来，说明还需要回到源码</h4>
+        <ol>{manual.reviewQuestions.map((question) => <li key={question}>{question}</li>)}</ol>
+      </section>
     </article>
   );
 }
@@ -295,6 +361,8 @@ export default function Guide() {
             ))}
           </div>
         </div>
+
+        <ArchitectureDiagram chapter={manualChapters["system-boundary"]} />
 
         <div className="layer-map">
           {architectureLayers.map((layer, index) => (

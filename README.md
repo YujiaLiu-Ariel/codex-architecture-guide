@@ -9,10 +9,10 @@ so every architecture claim can link to a stable source snapshot.
 
 ## What is included
 
-- a high-level architecture review with strengths, structural debt, scaling pressure, and correctness boundaries
-- a five-layer control/data-flow map from client projection to durable state
-- 10 source-grounded architecture dossiers covering runtime ownership, context, model flexibility, tools, accuracy, safety, memory, and extensibility
-- explicit mechanisms, trade-offs, failure modes, call paths, and source evidence for every dossier
+- a high-level architecture review with an end-to-end component diagram, strengths, structural debt, scaling pressure, and correctness boundaries
+- 10 long-form architecture chapters and 10 code-native diagrams covering runtime ownership, the turn loop, context, model flexibility, tools, accuracy, safety, memory, and extensibility
+- 44 numbered analysis sections with explicit mechanics, lifecycle boundaries, trade-offs, failure modes, invariants, and review questions
+- 48 pinned source ranges that explain what each cited implementation proves
 - a searchable source ownership index for locating the responsible crate or folder
 - responsive light and dark themes
 
